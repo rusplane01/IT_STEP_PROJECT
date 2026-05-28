@@ -6,6 +6,10 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <chrono>
+#include <thread>
+
+int Coins = 5;
 
 using namespace std;
 
@@ -139,7 +143,7 @@ class Enemy;
 class Player : public std::enable_shared_from_this<Player>
 {
     std::string Name;
-    int Health = 100;
+    int Health = 125;
     int AttackDamage = 20;
 
 public:
@@ -177,8 +181,10 @@ public:
         }
 
         std::cout << Name << " took " << damage << " damage\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(700));
         std::cout << Name << " HP: " << Health << "\n";
         std::cout << "    " << "\n";
+        std::this_thread::sleep_for(std::chrono::seconds(2));
 
         if (Health < 1)
         {
@@ -191,14 +197,18 @@ public:
 class Enemy : public std::enable_shared_from_this<Enemy>
 {
     std::string Name;
-    int Health = 50;
-    int AttackDamage = 19;
+    int MaxHealth = 50;
+    int Health = MaxHealth;
+    int AttackDamage = 25;
+    int CoinReward = 10;
+    bool IsDead = false;
 
 public:
     Event<int> DamageEvent;
 
-    Enemy(std::string name)
+    Enemy(std::string name, int coinReward)
         : Name(std::move(name))
+        , CoinReward(coinReward)
     {
     }
 
@@ -212,6 +222,17 @@ public:
         return Health;
     }
 
+    bool GetIsDead() const
+    {
+        return IsDead;
+    }
+
+    void Reset()
+    {
+        Health = MaxHealth;
+        IsDead = false;
+    }
+
     void Damage(int damage)
     {
         DamageEvent.Notify(damage);
@@ -219,26 +240,47 @@ public:
 
     void Attack(Player& player)
     {
+        if (IsDead)
+        {
+            return;
+        }
+
         std::cout << Name << " attacks " << player.GetName() << "\n";
         player.Damage(AttackDamage);
     }
 
     void OnDamage(int damage)
     {
+        if (IsDead)
+        {
+            return;
+        }
+
         Health -= damage;
 
         if (Health < 0)
         {
             Health = 0;
         }
-
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         std::cout << Name << " took " << damage << " damage\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(700));
         std::cout << Name << " HP: " << Health << "\n";
-        std::cout <<"    "<<"\n";
+        std::cout << "    " << "\n";
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
 
         if (Health < 1)
         {
+            IsDead = true;
+
             std::cout << Name << " is dead\n";
+
+            Coins += CoinReward;
+
+            std::cout << "    " << "\n";
+            std::cout << "Player received " << CoinReward << " coins\n";
+            std::cout << "Coins: " << Coins << "\n";
         }
     }
 };
@@ -249,14 +291,21 @@ void Player::Attack(Enemy& enemy)
     std::cout << Name << " attacks " << enemy.GetName() << "\n";
     enemy.Damage(AttackDamage);
 }
-
+    
 
 int main()
 {
     auto player = std::make_shared<Player>();
     player->SetName("Player");
 
-    auto enemy = std::make_shared<Enemy>("Enemy");
+    auto enemy = std::make_shared<Enemy>("Enemy", 10);
+
+    std::cout << "Current bank account: " << Coins << "\n";
+    std::cout << "Player enters a dark forest" << "\n";
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << "Prepare for the fight" << "\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "    " << "\n";
 
     player->DamageEvent.SubscribeWeak<Player>(
         player,
@@ -272,15 +321,28 @@ int main()
             e.OnDamage(damage);
         });
 
-    while (player->GetHealth() > 0 && enemy->GetHealth() > 0)
+    while (player->GetHealth() > 0)
     {
         enemy->Attack(*player);
 
-        if (player->GetHealth() > 0)
+        if (player->GetHealth() < 1)
         {
-            player->Attack(*enemy);
+            break;
+        }
+
+        player->Attack(*enemy);
+
+        if (enemy->GetIsDead())
+        {
+            std::cout << "A new enemy appears\n";
+            std::cout << "    " << "\n";
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            enemy->Reset();
         }
     }
+
+    std::cout << "Game over\n";
+    std::cout << "Final coins: " << Coins << "\n";
 
     return 0;
 }
