@@ -132,9 +132,15 @@ private:
     SubscriptionId NextId = 0;
 };
 
+
+class Enemy;
+
+
 class Player : public std::enable_shared_from_this<Player>
 {
     std::string Name;
+    int Health = 100;
+    int AttackDamage = 20;
 
 public:
     Event<int> DamageEvent;
@@ -149,47 +155,132 @@ public:
         return Name;
     }
 
+    int GetHealth() const
+    {
+        return Health;
+    }
+
     void Damage(int damage)
     {
         DamageEvent.Notify(damage);
     }
 
+    void Attack(Enemy& enemy);
+
     virtual void OnDamage(int damage)
     {
+        Health -= damage;
+
+        if (Health < 0)
+        {
+            Health = 0;
+        }
+
         std::cout << Name << " took " << damage << " damage\n";
+        std::cout << Name << " HP: " << Health << "\n";
+        std::cout << "    " << "\n";
+
+        if (Health < 1)
+        {
+            std::cout << Name << " is dead\n";
+        }
     }
 };
 
+
+class Enemy : public std::enable_shared_from_this<Enemy>
+{
+    std::string Name;
+    int Health = 50;
+    int AttackDamage = 19;
+
+public:
+    Event<int> DamageEvent;
+
+    Enemy(std::string name)
+        : Name(std::move(name))
+    {
+    }
+
+    std::string GetName() const
+    {
+        return Name;
+    }
+
+    int GetHealth() const
+    {
+        return Health;
+    }
+
+    void Damage(int damage)
+    {
+        DamageEvent.Notify(damage);
+    }
+
+    void Attack(Player& player)
+    {
+        std::cout << Name << " attacks " << player.GetName() << "\n";
+        player.Damage(AttackDamage);
+    }
+
+    void OnDamage(int damage)
+    {
+        Health -= damage;
+
+        if (Health < 0)
+        {
+            Health = 0;
+        }
+
+        std::cout << Name << " took " << damage << " damage\n";
+        std::cout << Name << " HP: " << Health << "\n";
+        std::cout <<"    "<<"\n";
+
+        if (Health < 1)
+        {
+            std::cout << Name << " is dead\n";
+        }
+    }
+};
+
+
+void Player::Attack(Enemy& enemy)
+{
+    std::cout << Name << " attacks " << enemy.GetName() << "\n";
+    enemy.Damage(AttackDamage);
+}
+
+
 int main()
 {
-    Event<int> OnDamage;
-
-    auto lambdaId = OnDamage.Subscribe(
-        [](int damage)
-        {
-            std::cout << "Lambda damage: " << damage << "\n";
-        });
-
     auto player = std::make_shared<Player>();
-    player->SetName("Knight");
+    player->SetName("Player");
 
-    auto weakId = OnDamage.SubscribeWeak<Player>(
+    auto enemy = std::make_shared<Enemy>("Enemy");
+
+    player->DamageEvent.SubscribeWeak<Player>(
         player,
         [](Player& p, int damage)
         {
             p.OnDamage(damage);
         });
 
-    OnDamage.Notify(25);
+    enemy->DamageEvent.SubscribeWeak<Enemy>(
+        enemy,
+        [](Enemy& e, int damage)
+        {
+            e.OnDamage(damage);
+        });
 
-    std::cout << "---- destroy player ----\n";
-    player.reset();
+    while (player->GetHealth() > 0 && enemy->GetHealth() > 0)
+    {
+        enemy->Attack(*player);
 
-    OnDamage.Notify(50);
-
-    OnDamage.Unsubscribe(lambdaId);
-
-    OnDamage.Notify(100);
+        if (player->GetHealth() > 0)
+        {
+            player->Attack(*enemy);
+        }
+    }
 
     return 0;
 }
